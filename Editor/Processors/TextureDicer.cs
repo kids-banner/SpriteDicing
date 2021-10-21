@@ -12,6 +12,10 @@ namespace SpriteDicing
     {
         private readonly int unitSize;
         private readonly int padding;
+        private readonly List<DicedUnit> units = new List<DicedUnit>();
+
+        private int sourceWidth, sourceHeight;
+        private Color[] sourcePixels;
 
         public TextureDicer (int unitSize, int padding)
         {
@@ -24,53 +28,63 @@ namespace SpriteDicing
 
         public DicedTexture Dice (SourceTexture source)
         {
-            var texture = source.Texture;
-            var units = new List<DicedUnit>();
-            var unitCountX = Mathf.CeilToInt((float)texture.width / unitSize);
-            var unitCountY = Mathf.CeilToInt((float)texture.height / unitSize);
-
+            PrepareToDice(source);
+            var unitCountX = Mathf.CeilToInt((float)sourceWidth / unitSize);
+            var unitCountY = Mathf.CeilToInt((float)sourceHeight / unitSize);
             for (int unitX = 0; unitX < unitCountX; unitX++)
             for (int unitY = 0; unitY < unitCountY; unitY++)
-            {
-                var x = unitX * unitSize;
-                var y = unitY * unitSize;
-                var pixelsRect = new RectInt(x, y, unitSize, unitSize);
-                var pixels = GetPixels(texture, pixelsRect);
-                if (pixels.All(p => p.a == 0)) continue;
-                var paddedRect = PadRect(pixelsRect, padding);
-                var paddedPixels = GetPixels(texture, paddedRect);
-                var quadVerts = CropOverBorders(pixelsRect, x, y, texture);
-                var hash = GetHash(unitSize, pixels);
-                var dicedUnit = new DicedUnit(quadVerts, paddedPixels, hash);
-                units.Add(dicedUnit);
-            }
-
+                DiceAt(unitX * unitSize, unitY * unitSize);
             return new DicedTexture(source, units);
         }
 
-        /// <returns>Flattened 2D array, where pixels are laid out left to right, bottom to top.</returns>
-        private static Color[] GetPixels (Texture2D texture, RectInt rect)
+        private void PrepareToDice (SourceTexture source)
         {
-            // TODO: GetPixels() from texture and reuse the array.
-            var endX = rect.x + rect.width;
-            var endY = rect.y + rect.height;
-            var colors = new Color[rect.width * rect.height];
-            for (int y = rect.y, i = 0; y < endY; y++)
-            for (int x = rect.x; x < endX; x++, i++)
-                colors[i] = texture.GetPixel(x, y);
-            return colors;
+            units.Clear();
+            sourceWidth = source.Texture.width;
+            sourceHeight = source.Texture.height;
+            sourcePixels = source.Texture.GetPixels();
         }
 
-        private static RectInt PadRect (RectInt rect, int padding)
+        private void DiceAt (int x, int y)
+        {
+            var rect = new RectInt(x, y, unitSize, unitSize);
+            var pixels = GetSourcePixels(rect);
+            if (pixels.All(p => p.a == 0)) return;
+            var paddedRect = PadRect(rect);
+            var paddedPixels = GetSourcePixels(paddedRect);
+            var quadVerts = CropOverBorders(rect, x, y);
+            var hash = GetHash(unitSize, pixels);
+            units.Add(new DicedUnit(quadVerts, paddedPixels, hash));
+        }
+
+        private Color[] GetSourcePixels (RectInt rect)
+        {
+            var endX = rect.x + rect.width;
+            var endY = rect.y + rect.height;
+            var pixels = new Color[rect.width * rect.height];
+            for (int y = rect.y, i = 0; y < endY; y++)
+            for (int x = rect.x; x < endX; x++, i++)
+                pixels[i] = GetSourcePixel(x, y);
+            return pixels;
+        }
+
+        private Color GetSourcePixel (int x, int y)
+        {
+            x = Mathf.Clamp(x, 0, sourceWidth - 1);
+            y = Mathf.Clamp(y, 0, sourceHeight - 1);
+            return sourcePixels[x + sourceWidth * y];
+        }
+
+        private RectInt PadRect (RectInt rect)
         {
             var delta = Vector2Int.one * padding;
             return new RectInt(rect.position - delta, rect.size + delta * 2);
         }
 
-        private static RectInt CropOverBorders (RectInt rect, int x, int y, Texture texture)
+        private RectInt CropOverBorders (RectInt rect, int x, int y)
         {
-            rect.width = Mathf.Min(rect.width, texture.width - x);
-            rect.height = Mathf.Min(rect.height, texture.height - y);
+            rect.width = Mathf.Min(rect.width, sourceWidth - x);
+            rect.height = Mathf.Min(rect.height, sourceHeight - y);
             return rect;
         }
 
