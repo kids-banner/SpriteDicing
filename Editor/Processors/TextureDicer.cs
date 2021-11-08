@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using Unity.Collections.LowLevel.Unsafe;
 using UnityEngine;
 
 namespace SpriteDicing
@@ -15,7 +16,7 @@ namespace SpriteDicing
         private readonly List<DicedUnit> units = new List<DicedUnit>();
 
         private int sourceWidth, sourceHeight;
-        private Color[] sourcePixels;
+        private Color32[] sourcePixels;
 
         public TextureDicer (int unitSize, int padding)
         {
@@ -42,7 +43,7 @@ namespace SpriteDicing
             units.Clear();
             sourceWidth = source.Texture.width;
             sourceHeight = source.Texture.height;
-            sourcePixels = source.Texture.GetPixels();
+            sourcePixels = source.Texture.GetPixels32();
         }
 
         private void DiceAt (int x, int y)
@@ -53,22 +54,22 @@ namespace SpriteDicing
             var paddedRect = PadRect(rect);
             var paddedPixels = GetSourcePixels(paddedRect);
             var quadVerts = CropOverBorders(rect, x, y);
-            var hash = GetHash(unitSize, pixels);
+            var hash = GetHash(pixels);
             units.Add(new DicedUnit(quadVerts, paddedPixels, hash));
         }
 
-        private Color[] GetSourcePixels (RectInt rect)
+        private Color32[] GetSourcePixels (RectInt rect)
         {
             var endX = rect.x + rect.width;
             var endY = rect.y + rect.height;
-            var pixels = new Color[rect.width * rect.height];
+            var pixels = new Color32[rect.width * rect.height];
             for (int y = rect.y, i = 0; y < endY; y++)
             for (int x = rect.x; x < endX; x++, i++)
                 pixels[i] = GetSourcePixel(x, y);
             return pixels;
         }
 
-        private Color GetSourcePixel (int x, int y)
+        private Color32 GetSourcePixel (int x, int y)
         {
             x = Mathf.Clamp(x, 0, sourceWidth - 1);
             y = Mathf.Clamp(y, 0, sourceHeight - 1);
@@ -88,13 +89,16 @@ namespace SpriteDicing
             return rect;
         }
 
-        private static Hash128 GetHash (int size, Color[] pixels)
+        private static unsafe Hash128 GetHash (Color32[] pixels)
         {
-            // TODO: Find out how Unity builds image content hash and replicate.
-            var texture = new Texture2D(size, size, TextureFormat.RGBA32, false);
-            texture.SetPixels(pixels);
-            texture.Apply();
-            return texture.imageContentsHash;
+            var hash = new Hash128();
+            fixed (byte* data = &pixels[0].r)
+            {
+                var dataSize = (ulong)pixels.Length * 4;
+                var hashPtr = (Hash128*)UnsafeUtility.AddressOf(ref hash);
+                HashUnsafeUtilities.ComputeHash128(data, dataSize, hashPtr);
+            }
+            return hash;
         }
     }
 }
