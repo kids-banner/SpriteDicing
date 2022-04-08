@@ -14,6 +14,7 @@ namespace SpriteDicing
         private readonly int padding;
         private readonly List<DicedUnit> units = new List<DicedUnit>();
 
+        private int sourceStartX, sourceStartY;
         private int sourceWidth, sourceHeight;
         private Color32[] sourcePixels;
 
@@ -31,8 +32,12 @@ namespace SpriteDicing
             PrepareToDice(source);
             var unitCountX = Mathf.CeilToInt((float)sourceWidth / unitSize);
             var unitCountY = Mathf.CeilToInt((float)sourceHeight / unitSize);
-            for (int unitX = 0; unitX < unitCountX; unitX++)
-            for (int unitY = 0; unitY < unitCountY; unitY++)
+
+            var unitStartX = Mathf.FloorToInt((float)sourceStartX / unitSize);
+            var unitStartY = Mathf.FloorToInt((float)sourceStartY / unitSize);
+
+            for (int unitX = unitStartX; unitX < unitCountX; unitX++)
+            for (int unitY = unitStartY; unitY < unitCountY; unitY++)
                 DiceAt(unitX * unitSize, unitY * unitSize);
             return new DicedTexture(source, units);
         }
@@ -40,9 +45,39 @@ namespace SpriteDicing
         private void PrepareToDice (SourceTexture source)
         {
             units.Clear();
-            sourceWidth = source.Texture.width;
-            sourceHeight = source.Texture.height;
-            sourcePixels = source.Texture.GetPixels32();
+            var texture = source.Texture;
+
+            sourceWidth = texture.width;
+            sourceHeight = texture.height;
+            sourcePixels = texture.GetPixels32();
+
+            sourceStartX = GetStartX();
+            sourceStartY = GetStartY();
+            Debug.Log($"sourceStartX = {sourceStartX}, sourceStartY = {sourceStartY}");
+        }
+
+        private int GetStartX()
+        {
+            for (int x = 0; x < sourceWidth; x++)
+            for (int y = 0; y < sourceHeight; y++)
+            {
+                var pixel = GetSourcePixel(x, y);
+                if (pixel.a != 0) return x;
+            }
+
+            return sourceWidth;
+        }
+
+        private int GetStartY()
+        {
+            for (int y = 0; y < sourceHeight; y++)
+            for (int x = 0; x < sourceWidth; x++)
+            {
+                var pixel = GetSourcePixel(x, y);
+                if (pixel.a != 0) return y;
+            }
+
+            return sourceHeight;
         }
 
         private void DiceAt (int x, int y)
